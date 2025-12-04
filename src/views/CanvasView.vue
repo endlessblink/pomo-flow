@@ -665,7 +665,13 @@ const filteredTasksWithProjectFiltering = computed(() => {
       const currentTasks = taskStore.filteredTasks
 
       // Performance optimization: Only update if actually changed
-      const currentHash = currentTasks.map(t => t.id).join('|')
+      // FIX: Include updatedAt in hash to detect property changes (like moving from inbox to canvas)
+      // We check for updatedAt existence and convert to timestamp or string to ensure uniqueness
+      const currentHash = currentTasks.map(t => {
+        const timestamp = t.updatedAt instanceof Date ? t.updatedAt.getTime() : t.updatedAt
+        return `${t.id}:${timestamp}:${t.isInInbox}:${t.canvasPosition ? 'pos' : 'nopos'}`
+      }).join('|')
+
       if (currentHash === lastFilteredTasksHash && lastFilteredTasks.length > 0) {
         return lastFilteredTasks
       }
@@ -4247,6 +4253,19 @@ const handleDrop = async (event: DragEvent) => {
         x: event.clientX,
         y: event.clientY
       })
+      // Validate coordinates - if NaN or infinite, fallback to center of viewport
+      if (!Number.isFinite(canvasPosition.x) || !Number.isFinite(canvasPosition.y)) {
+        console.warn('⚠️ [CANVAS] Projected coordinates are invalid:', canvasPosition)
+        // Fallback to center of current viewport or default 0,0
+        if (viewport.value) {
+          const centerX = (window.innerWidth / 2 - viewport.value.x) / viewport.value.zoom
+          const centerY = (window.innerHeight / 2 - viewport.value.y) / viewport.value.zoom
+          canvasPosition = { x: centerX, y: centerY }
+        } else {
+          canvasPosition = { x: 0, y: 0 }
+        }
+        console.log('🔄 [CANVAS] Using fallback position:', canvasPosition)
+      }
     } catch (error) {
       console.error('❌ [CANVAS] Failed to transform coordinates:', error)
       return
